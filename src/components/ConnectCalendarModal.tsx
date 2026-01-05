@@ -76,6 +76,7 @@ export default function ConnectCalendarModal({
     >(null);
     const [selectedCalendars, setSelectedCalendars] = useState<string[]>([]);
     const [isLoadingCalendars, setIsLoadingCalendars] = useState(false);
+    const [calendars, setCalendars] = useState([]);
     const workspaceId = sessionStorage.getItem("selected_workspace_id");
 
     const fetchCalendars = async (provider: "google" | "microsoft") => {
@@ -93,6 +94,7 @@ export default function ConnectCalendarModal({
         }
 
         setIsLoadingCalendars(false);
+        setCalendars(result.calendars);
     };
 
     const login = useGoogleLogin({
@@ -155,11 +157,6 @@ export default function ConnectCalendarModal({
             setIsLoadingCalendars(false);
         }, 300);
     };
-
-    const calendars =
-        selectedProvider === "google"
-            ? mockGoogleCalendars
-            : mockMicrosoftCalendars;
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
@@ -265,7 +262,6 @@ export default function ConnectCalendarModal({
                                                 <TableHead>
                                                     Calendar Name
                                                 </TableHead>
-                                                <TableHead>Email</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -294,10 +290,7 @@ export default function ConnectCalendarModal({
                                                         />
                                                     </TableCell>
                                                     <TableCell className="font-medium">
-                                                        {calendar.name}
-                                                    </TableCell>
-                                                    <TableCell className="text-muted-foreground">
-                                                        {calendar.email}
+                                                        {calendar.summary}
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
