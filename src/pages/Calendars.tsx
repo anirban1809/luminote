@@ -7,7 +7,6 @@ import {
     Loader2,
     MoreHorizontal,
     Trash2,
-    User,
 } from "lucide-react";
 import ConnectCalendarModal from "@/components/ConnectCalendarModal";
 import { Card, CardContent } from "@/components/ui/card";
@@ -33,6 +32,7 @@ import {
 import { apiFetch } from "@/lib/api/api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { toast } from "@/hooks/use-toast";
 
 // Platform icons as simple SVG components
 const GoogleIcon = ({ className }: { className?: string }) => (
@@ -83,88 +83,6 @@ interface ConnectedAccount {
     lastSync: string;
 }
 
-// Mock data for demonstration//
-const mockConnectedAccounts: ConnectedAccount[] = [
-    {
-        id: "g1",
-        email: "personal@gmail.com",
-        provider: "google",
-        lastSync: "5 minutes ago",
-    },
-    {
-        id: "g2",
-        email: "work@company.com",
-        provider: "google",
-        lastSync: "10 minutes ago",
-    },
-    {
-        id: "m1",
-        email: "user@outlook.com",
-        provider: "microsoft",
-        lastSync: "2 minutes ago",
-    },
-];
-
-const mockConnectedCalendars: CalendarData[] = [
-    {
-        id: "1",
-        name: "Personal Calendar",
-        email: "personal@gmail.com",
-        provider: "google",
-        accountId: "g1",
-        status: "CONNECTED",
-        auto_join: true,
-    },
-    {
-        id: "2",
-        name: "Work Calendar",
-        email: "work@company.com",
-        provider: "google",
-        accountId: "g2",
-        status: "SYNCING",
-        auto_join: false,
-    },
-    {
-        id: "3",
-        name: "Outlook Calendar",
-        email: "user@outlook.com",
-        provider: "microsoft",
-        accountId: "m1",
-        status: "CONNECTED",
-        auto_join: true,
-    },
-];
-
-const mockAvailableCalendars: CalendarData[] = [
-    {
-        id: "4",
-        name: "Holidays",
-        email: "personal@gmail.com",
-        provider: "google",
-        accountId: "g1",
-        status: "CONNECTED",
-        auto_join: false,
-    },
-    {
-        id: "5",
-        name: "Team Events",
-        email: "work@company.com",
-        provider: "google",
-        accountId: "g2",
-        status: "NOT_CONNECTED",
-        auto_join: false,
-    },
-    {
-        id: "6",
-        name: "Shared Calendar",
-        email: "user@outlook.com",
-        provider: "microsoft",
-        accountId: "m1",
-        status: "NOT_CONNECTED",
-        auto_join: false,
-    },
-];
-
 export default function Calendars() {
     const [connectModalOpen, setConnectModalOpen] = useState(false);
     const [calendarToDisconnect, setCalendarToDisconnect] =
@@ -204,22 +122,81 @@ export default function Calendars() {
     useEffect(() => {
         (async () => {
             const workspaceId = sessionStorage.getItem("selected_workspace_id");
+            if (!workspaceId) {
+                toast({
+                    title: "No workspace selected",
+                    description:
+                        "Select a workspace to view your connected calendars.",
+                    variant: "destructive",
+                });
+                setLoading(false);
+                return;
+            }
             try {
                 const response = await apiFetch(
                     `/calendars?workspaceId=${workspaceId}`
                 );
                 const result = await response.json();
-                console.log(result);
-                // For now, use mock data
-                setConnectedAccounts(mockConnectedAccounts);
-                setConnectedCalendars(mockConnectedCalendars);
-                setAvailableCalendars(mockAvailableCalendars);
+
+                const calendarsFromApi = Array.isArray(result)
+                    ? result
+                    : result?.calendars ?? [];
+
+                const normalizedCalendars: CalendarData[] =
+                    calendarsFromApi.map((calendar: any) => {
+                        const provider: "google" | "microsoft" =
+                            calendar.provider === "microsoft"
+                                ? "microsoft"
+                                : "google";
+                        const email =
+                            calendar.user_email || calendar.email || "";
+                        const id =
+                            calendar.calendar_id ||
+                            calendar.id ||
+                            calendar.SK ||
+                            crypto.randomUUID();
+                        const accountId = `${provider}-${email || "account"}`;
+
+                        return {
+                            id,
+                            name:
+                                calendar.summary ||
+                                calendar.name ||
+                                calendar.calendar_id ||
+                                "Calendar",
+                            email,
+                            provider,
+                            accountId,
+                            status:
+                                (calendar.status as CalendarData["status"]) ||
+                                "CONNECTED",
+                            auto_join: Boolean(calendar.auto_join),
+                            owner: calendar.owner,
+                        };
+                    });
+
+                const accountsMap = new Map<string, ConnectedAccount>();
+                normalizedCalendars.forEach((calendar) => {
+                    if (!accountsMap.has(calendar.accountId)) {
+                        accountsMap.set(calendar.accountId, {
+                            id: calendar.accountId,
+                            email: calendar.email || "Calendar account",
+                            provider: calendar.provider,
+                            lastSync: "Just now",
+                        });
+                    }
+                });
+
+                setConnectedAccounts(Array.from(accountsMap.values()));
+                setConnectedCalendars(normalizedCalendars);
+                setAvailableCalendars([]);
             } catch (error) {
                 console.error("Failed to fetch calendars:", error);
-                // Use mock data on error
-                setConnectedAccounts(mockConnectedAccounts);
-                setConnectedCalendars(mockConnectedCalendars);
-                setAvailableCalendars(mockAvailableCalendars);
+                toast({
+                    title: "Unable to load calendars",
+                    description: "Please try refreshing the page.",
+                    variant: "destructive",
+                });
             }
             setLoading(false);
         })();

@@ -70,31 +70,48 @@ export default function ConnectCalendarModal({
     open,
     onOpenChange,
 }: ConnectCalendarModalProps) {
+    interface CalendarItem {
+        id: string;
+        summary: string;
+        color?: string;
+    }
+
     const [step, setStep] = useState<"provider" | "calendars">("provider");
     const [selectedProvider, setSelectedProvider] = useState<
         "google" | "microsoft" | null
     >(null);
     const [selectedCalendars, setSelectedCalendars] = useState<string[]>([]);
     const [isLoadingCalendars, setIsLoadingCalendars] = useState(false);
-    const [calendars, setCalendars] = useState([]);
+    const [isSavingCalendars, setIsSavingCalendars] = useState(false);
+    const [calendars, setCalendars] = useState<CalendarItem[]>([]);
     const workspaceId = sessionStorage.getItem("selected_workspace_id");
 
     const fetchCalendars = async (provider: "google" | "microsoft") => {
         setIsLoadingCalendars(true);
+        try {
+            const res = await apiFetch(
+                `/${provider}/calendars?workspaceId=${workspaceId}`
+            );
 
-        const res = await apiFetch(
-            `/${provider}/calendars?workspaceId=${workspaceId}`
-        );
+            const result = await res.json();
+            console.log(result);
 
-        const result = await res.json();
-        console.log(result);
+            if (!result.ok) {
+                throw new Error("Failed to fetch calendars");
+            }
 
-        if (!result.ok) {
-            throw new Error("Failed to fetch calendars");
+            setCalendars(result.calendars);
+        } catch (error) {
+            console.error(error);
+            toast({
+                title: "Unable to load calendars",
+                description:
+                    "We could not fetch your calendars. Please try again.",
+                variant: "destructive",
+            });
+        } finally {
+            setIsLoadingCalendars(false);
         }
-
-        setIsLoadingCalendars(false);
-        setCalendars(result.calendars);
     };
 
     const login = useGoogleLogin({
@@ -138,13 +155,56 @@ export default function ConnectCalendarModal({
         );
     };
 
-    const handleConnect = () => {
-        const provider = selectedProvider === "google" ? "Google" : "Microsoft";
-        toast({
-            title: "Calendars connected",
-            description: `Successfully connected ${selectedCalendars.length} ${provider} calendar(s)`,
-        });
-        handleClose();
+    const handleConnect = async () => {
+        if (!selectedProvider) return;
+        if (!workspaceId) {
+            toast({
+                title: "Workspace missing",
+                description:
+                    "Select a workspace before connecting calendars.",
+                variant: "destructive",
+            });
+            return;
+        }
+        setIsSavingCalendars(true);
+        try {
+            const res = await apiFetch(
+                `/${selectedProvider}/calendars?workspaceId=${workspaceId}`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        calendars: selectedCalendars,
+                    }),
+                }
+            );
+
+            const result = await res.json();
+
+            if (!result.ok) {
+                throw new Error("Failed to connect calendars");
+            }
+
+            const provider =
+                selectedProvider === "google" ? "Google" : "Microsoft";
+            toast({
+                title: "Calendars connected",
+                description: `Successfully connected ${selectedCalendars.length} ${provider} calendar(s)`,
+            });
+            handleClose();
+        } catch (error) {
+            console.error(error);
+            toast({
+                title: "Failed to connect calendars",
+                description:
+                    "Something went wrong while connecting your calendars. Please try again.",
+                variant: "destructive",
+            });
+        } finally {
+            setIsSavingCalendars(false);
+        }
     };
 
     const handleClose = () => {
@@ -155,6 +215,7 @@ export default function ConnectCalendarModal({
             setSelectedProvider(null);
             setSelectedCalendars([]);
             setIsLoadingCalendars(false);
+            setIsSavingCalendars(false);
         }, 300);
     };
 
@@ -315,11 +376,16 @@ export default function ConnectCalendarModal({
                                         <Button
                                             onClick={handleConnect}
                                             disabled={
-                                                selectedCalendars.length === 0
+                                                selectedCalendars.length ===
+                                                    0 ||
+                                                isSavingCalendars ||
+                                                !selectedProvider
                                             }
                                         >
-                                            Connect {selectedCalendars.length}{" "}
-                                            Calendar
+                                            {isSavingCalendars
+                                                ? "Connecting..."
+                                                : "Connect"}{" "}
+                                            {selectedCalendars.length} Calendar
                                             {selectedCalendars.length !== 1
                                                 ? "s"
                                                 : ""}
