@@ -45,6 +45,7 @@ type Source = {
 export default function Home() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
     const [scopeChips, setScopeChips] = useState<string[]>([]);
     const [expandedSources, setExpandedSources] = useState<
         Record<string, boolean>
@@ -90,48 +91,136 @@ export default function Home() {
             duration: "28 min",
         },
     ];
-    const handleSend = () => {
-        if (!input.trim()) return;
+    const handleSend = async () => {
+        if (!input.trim() || isLoading) return;
+        
         const userMessage: Message = {
             id: Date.now().toString(),
             role: "user",
             content: input,
         };
-
-        // Mock assistant response
-        const assistantMessage: Message = {
-            id: (Date.now() + 1).toString(),
-            role: "assistant",
-            content:
-                "Based on your meetings and transcripts, here's what I found...",
-            sources: [
-                {
-                    type: "meeting",
-                    title: "Q3 Review with Acme Corp",
-                    metadata: "Oct 3, 2025 • John Smith • Acme Corp",
-                    snippet:
-                        "We discussed the pricing model and agreed to a 15% discount for annual contracts...",
-                    timestamp: "12:34",
-                    confidence: "High confidence",
-                },
-                {
-                    type: "transcript",
-                    title: "Product Strategy Session",
-                    metadata: "Oct 1, 2025 • Sarah Johnson",
-                    snippet:
-                        "The team decided to prioritize feature X for Q4 delivery...",
-                    timestamp: "08:15",
-                    confidence: "Medium confidence",
-                },
-            ],
-            suggestedFollowUps: [
-                "What were the key decisions?",
-                "Show me related action items",
-                "Who attended these meetings?",
-            ],
-        };
-        setMessages([...messages, userMessage, assistantMessage]);
+        
+        const assistantMessageId = (Date.now() + 1).toString();
+        
+        setMessages(prev => [...prev, userMessage]);
         setInput("");
+        setIsLoading(true);
+        
+        let assistantContent = "";
+        
+        try {
+            const response = await fetch("https://ssestaging.luminote.ai/sse", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ prompt: input }),
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Request failed with status ${response.status}`);
+            }
+            
+            if (!response.body) {
+                throw new Error("No response body");
+            }
+            
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+            
+            // Add initial assistant message
+            setMessages(prev => [...prev, {
+                id: assistantMessageId,
+                role: "assistant",
+                content: "",
+            }]);
+            
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                buffer += decoder.decode(value, { stream: true });
+                
+                // Process SSE lines
+                let newlineIndex: number;
+                while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
+                    let line = buffer.slice(0, newlineIndex);
+                    buffer = buffer.slice(newlineIndex + 1);
+                    
+                    if (line.endsWith("\r")) line = line.slice(0, -1);
+                    if (line.startsWith(":") || line.trim() === "") continue;
+                    if (!line.startsWith("data: ")) continue;
+                    
+                    const dataStr = line.slice(6).trim();
+                    if (dataStr === "[DONE]") break;
+                    
+                    try {
+                        const parsed = JSON.parse(dataStr);
+                        const content = parsed.choices?.[0]?.delta?.content || parsed.content || parsed.data || dataStr;
+                        if (typeof content === "string") {
+                            assistantContent += content;
+                            setMessages(prev => 
+                                prev.map(m => 
+                                    m.id === assistantMessageId 
+                                        ? { ...m, content: assistantContent }
+                                        : m
+                                )
+                            );
+                        }
+                    } catch {
+                        // If not JSON, treat as plain text
+                        assistantContent += dataStr;
+                        setMessages(prev => 
+                            prev.map(m => 
+                                m.id === assistantMessageId 
+                                    ? { ...m, content: assistantContent }
+                                    : m
+                            )
+                        );
+                    }
+                }
+            }
+            
+            // Flush remaining buffer
+            if (buffer.trim()) {
+                for (let raw of buffer.split("\n")) {
+                    if (!raw) continue;
+                    if (raw.endsWith("\r")) raw = raw.slice(0, -1);
+                    if (raw.startsWith(":") || raw.trim() === "") continue;
+                    if (!raw.startsWith("data: ")) continue;
+                    const dataStr = raw.slice(6).trim();
+                    if (dataStr === "[DONE]") continue;
+                    try {
+                        const parsed = JSON.parse(dataStr);
+                        const content = parsed.choices?.[0]?.delta?.content || parsed.content || parsed.data || dataStr;
+                        if (typeof content === "string") {
+                            assistantContent += content;
+                        }
+                    } catch {
+                        assistantContent += dataStr;
+                    }
+                }
+                setMessages(prev => 
+                    prev.map(m => 
+                        m.id === assistantMessageId 
+                            ? { ...m, content: assistantContent }
+                            : m
+                    )
+                );
+            }
+        } catch (error) {
+            console.error("SSE error:", error);
+            setMessages(prev => 
+                prev.map(m => 
+                    m.id === assistantMessageId 
+                        ? { ...m, content: "Sorry, an error occurred while processing your request." }
+                        : m
+                )
+            );
+        } finally {
+            setIsLoading(false);
+        }
     };
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
@@ -521,7 +610,7 @@ export default function Home() {
                             onKeyDown={handleKeyDown}
                             className="min-h-[60px] resize-none"
                         />
-                        <Button onClick={handleSend} disabled={!input.trim()}>
+                        <Button onClick={handleSend} disabled={!input.trim() || isLoading}>
                             <Send className="h-4 w-4" />
                         </Button>
                     </div>
