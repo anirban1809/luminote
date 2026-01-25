@@ -26,6 +26,7 @@ import { apiFetch } from "@/lib/api/api";
 interface ConnectCalendarModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    onConnected?: () => void;
 }
 
 const mockGoogleCalendars = [
@@ -69,6 +70,7 @@ const mockMicrosoftCalendars = [
 export default function ConnectCalendarModal({
     open,
     onOpenChange,
+    onConnected,
 }: ConnectCalendarModalProps) {
     interface CalendarItem {
         id: string;
@@ -84,6 +86,7 @@ export default function ConnectCalendarModal({
     const [isLoadingCalendars, setIsLoadingCalendars] = useState(false);
     const [isSavingCalendars, setIsSavingCalendars] = useState(false);
     const [calendars, setCalendars] = useState<CalendarItem[]>([]);
+    const [accountEmail, setAccountEmail] = useState<string>("");
     const workspaceId = sessionStorage.getItem("selected_workspace_id");
 
     const fetchCalendars = async (provider: "google" | "microsoft") => {
@@ -98,6 +101,10 @@ export default function ConnectCalendarModal({
 
             if (!result.ok) {
                 throw new Error("Failed to fetch calendars");
+            }
+
+            if (result.email) {
+                setAccountEmail(result.email);
             }
 
             setCalendars(result.calendars);
@@ -176,7 +183,13 @@ export default function ConnectCalendarModal({
                         "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
-                        calendars: selectedCalendars,
+                        calendars: calendars
+                            .filter((c) => selectedCalendars.includes(c.id))
+                            .map((c) => ({
+                                id: c.id,
+                                name: c.summary,
+                            })),
+                        email: accountEmail,
                     }),
                 }
             );
@@ -193,6 +206,7 @@ export default function ConnectCalendarModal({
                 title: "Calendars connected",
                 description: `Successfully connected ${selectedCalendars.length} ${provider} calendar(s)`,
             });
+            onConnected?.();
             handleClose();
         } catch (error) {
             console.error(error);

@@ -34,7 +34,6 @@ const mainNav = [
     { title: "Meetings", url: "/meetings", icon: Calendar },
     { title: "Calendars", url: "/calendars", icon: Calendar },
     { title: "Tasks", url: "/tasks", icon: CheckSquare },
-    { title: "Chat", url: "/chat", icon: MessageSquare },
 ];
 
 const workflowNav = [

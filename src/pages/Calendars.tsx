@@ -99,10 +99,144 @@ export default function Calendars() {
     const [availableCalendars, setAvailableCalendars] = useState<
         CalendarData[]
     >([]);
+    const [isDisconnecting, setIsDisconnecting] = useState(false);
+
+    const loadCalendars = async () => {
+        setLoading(true);
+        const workspaceId = sessionStorage.getItem("selected_workspace_id");
+        if (!workspaceId) {
+            toast({
+                title: "No workspace selected",
+                description:
+                    "Select a workspace to view your connected calendars.",
+                variant: "destructive",
+            });
+            setLoading(false);
+            return;
+        }
+
+        try {
+            const response = await apiFetch(
+                `/calendars?workspaceId=${workspaceId}`
+            );
+            const result = await response.json();
+
+            const calendarsFromApi = Array.isArray(result)
+                ? result
+                : result?.calendars ?? [];
+
+            const normalizedCalendars: CalendarData[] = calendarsFromApi.map(
+                (calendar: any) => {
+                    const provider: "google" | "microsoft" =
+                        calendar.provider === "microsoft"
+                            ? "microsoft"
+                            : "google";
+                    const email =
+                        calendar.owner_email ||
+                        calendar.user_email ||
+                        calendar.email ||
+                        "";
+                    const id =
+                        calendar.calendar_id ||
+                        calendar.id ||
+                        calendar.SK ||
+                        crypto.randomUUID();
+                    const accountId = `${provider}-${email || "account"}`;
+
+                    return {
+                        id,
+                        name:
+                            calendar.calendar_name ||
+                            calendar.summary ||
+                            calendar.name ||
+                            calendar.calendar_id ||
+                            "Calendar",
+                        email,
+                        provider,
+                        accountId,
+                        status:
+                            (calendar.status as CalendarData["status"]) ||
+                            "CONNECTED",
+                        auto_join: Boolean(calendar.auto_join),
+                        owner: calendar.owner,
+                    };
+                }
+            );
+
+            const accountsMap = new Map<string, ConnectedAccount>();
+            normalizedCalendars.forEach((calendar) => {
+                if (!accountsMap.has(calendar.accountId)) {
+                    accountsMap.set(calendar.accountId, {
+                        id: calendar.accountId,
+                        email: calendar.email || "Calendar account",
+                        provider: calendar.provider,
+                        lastSync: "Just now",
+                    });
+                }
+            });
+
+            setConnectedAccounts(Array.from(accountsMap.values()));
+            setConnectedCalendars(normalizedCalendars);
+            setAvailableCalendars([]);
+        } catch (error) {
+            console.error("Failed to fetch calendars:", error);
+            toast({
+                title: "Unable to load calendars",
+                description: "Please try refreshing the page.",
+                variant: "destructive",
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleDisconnectCalendar = () => {
-        console.log("Disconnecting calendar:", calendarToDisconnect?.name);
-        setCalendarToDisconnect(null);
+        if (!calendarToDisconnect) return;
+        const workspaceId = sessionStorage.getItem("selected_workspace_id");
+        if (!workspaceId) {
+            toast({
+                title: "No workspace selected",
+                description:
+                    "Select a workspace before disconnecting a calendar.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        const { id, email } = calendarToDisconnect;
+
+        setIsDisconnecting(true);
+        apiFetch(`/calendars?workspaceId=${workspaceId}`, {
+            method: "DELETE",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                calendarId: id,
+                email,
+            }),
+        })
+            .then((res) => res.json())
+            .then((result) => {
+                if (!result.ok) {
+                    throw new Error("Failed to disconnect calendar");
+                }
+                toast({
+                    title: "Calendar disconnected",
+                    description: `${calendarToDisconnect.name} has been removed.`,
+                });
+                setCalendarToDisconnect(null);
+                loadCalendars();
+            })
+            .catch((error) => {
+                console.error("Failed to disconnect calendar:", error);
+                toast({
+                    title: "Unable to disconnect calendar",
+                    description: "Please try again.",
+                    variant: "destructive",
+                });
+            })
+            .finally(() => setIsDisconnecting(false));
     };
 
     const handleRemoveAccount = () => {
@@ -120,86 +254,7 @@ export default function Calendars() {
     };
 
     useEffect(() => {
-        (async () => {
-            const workspaceId = sessionStorage.getItem("selected_workspace_id");
-            if (!workspaceId) {
-                toast({
-                    title: "No workspace selected",
-                    description:
-                        "Select a workspace to view your connected calendars.",
-                    variant: "destructive",
-                });
-                setLoading(false);
-                return;
-            }
-            try {
-                const response = await apiFetch(
-                    `/calendars?workspaceId=${workspaceId}`
-                );
-                const result = await response.json();
-
-                const calendarsFromApi = Array.isArray(result)
-                    ? result
-                    : result?.calendars ?? [];
-
-                const normalizedCalendars: CalendarData[] =
-                    calendarsFromApi.map((calendar: any) => {
-                        const provider: "google" | "microsoft" =
-                            calendar.provider === "microsoft"
-                                ? "microsoft"
-                                : "google";
-                        const email =
-                            calendar.user_email || calendar.email || "";
-                        const id =
-                            calendar.calendar_id ||
-                            calendar.id ||
-                            calendar.SK ||
-                            crypto.randomUUID();
-                        const accountId = `${provider}-${email || "account"}`;
-
-                        return {
-                            id,
-                            name:
-                                calendar.summary ||
-                                calendar.name ||
-                                calendar.calendar_id ||
-                                "Calendar",
-                            email,
-                            provider,
-                            accountId,
-                            status:
-                                (calendar.status as CalendarData["status"]) ||
-                                "CONNECTED",
-                            auto_join: Boolean(calendar.auto_join),
-                            owner: calendar.owner,
-                        };
-                    });
-
-                const accountsMap = new Map<string, ConnectedAccount>();
-                normalizedCalendars.forEach((calendar) => {
-                    if (!accountsMap.has(calendar.accountId)) {
-                        accountsMap.set(calendar.accountId, {
-                            id: calendar.accountId,
-                            email: calendar.email || "Calendar account",
-                            provider: calendar.provider,
-                            lastSync: "Just now",
-                        });
-                    }
-                });
-
-                setConnectedAccounts(Array.from(accountsMap.values()));
-                setConnectedCalendars(normalizedCalendars);
-                setAvailableCalendars([]);
-            } catch (error) {
-                console.error("Failed to fetch calendars:", error);
-                toast({
-                    title: "Unable to load calendars",
-                    description: "Please try refreshing the page.",
-                    variant: "destructive",
-                });
-            }
-            setLoading(false);
-        })();
+        loadCalendars();
     }, []);
 
     const getAccountsForPlatform = (platform: "google" | "microsoft") =>
@@ -390,6 +445,7 @@ export default function Calendars() {
             <ConnectCalendarModal
                 open={connectModalOpen}
                 onOpenChange={setConnectModalOpen}
+                onConnected={loadCalendars}
             />
 
             {/* Page Header */}
@@ -529,8 +585,11 @@ export default function Calendars() {
                         <AlertDialogAction
                             onClick={handleDisconnectCalendar}
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            disabled={isDisconnecting}
                         >
-                            Disconnect
+                            {isDisconnecting
+                                ? "Disconnecting..."
+                                : "Disconnect"}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
