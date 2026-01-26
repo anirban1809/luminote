@@ -27,6 +27,7 @@ import {
     Download,
     Save,
 } from "lucide-react";
+import { sseFetch } from "@/lib/api/api";
 type Message = {
     id: string;
     role: "user" | "assistant";
@@ -42,6 +43,66 @@ type Source = {
     timestamp?: string;
     confidence: string;
 };
+
+const escapeHtml = (str: string) =>
+    str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+const renderAssistantContent = (raw: string) => {
+    const unescaped = raw
+        .replace(/\\n/g, "\n")
+        .replace(/\\t/g, "\t")
+        .replace(/\\r/g, "")
+        .replace(/\\\\/g, "\\");
+
+    const parts = unescaped.split(/```/);
+
+    return parts.map((segment, index) => {
+        const isCode = index % 2 === 1;
+        if (isCode) {
+            return (
+                <pre
+                    key={`code-${index}`}
+                    className="bg-muted rounded-lg px-4 py-3 my-2 overflow-x-auto text-sm"
+                >
+                    <code>{segment}</code>
+                </pre>
+            );
+        }
+
+        const escaped = escapeHtml(segment);
+        const inlineCode = escaped.replace(
+            /`([^`]+)`/g,
+            "<code>$1</code>"
+        );
+        const headings = inlineCode
+            .replace(/^###### (.*)$/gm, "<h6>$1</h6>")
+            .replace(/^##### (.*)$/gm, "<h5>$1</h5>")
+            .replace(/^#### (.*)$/gm, "<h4>$1</h4>")
+            .replace(/^### (.*)$/gm, "<h3>$1</h3>")
+            .replace(/^## (.*)$/gm, "<h2>$1</h2>")
+            .replace(/^# (.*)$/gm, "<h1>$1</h1>");
+        const bolded = headings.replace(
+            /\*\*([^*]+)\*\*/g,
+            "<strong>$1</strong>"
+        );
+        const italicized = bolded.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+        const withBreaks = italicized.replace(/\n/g, "<br />");
+
+        return (
+            <div
+                key={`text-${index}`}
+                className="prose prose-sm max-w-none break-words"
+                dangerouslySetInnerHTML={{ __html: withBreaks }}
+            />
+        );
+    });
+};
+
 export default function Home() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
@@ -93,117 +154,71 @@ export default function Home() {
     ];
     const handleSend = async () => {
         if (!input.trim() || isLoading) return;
-        
+
         const userMessage: Message = {
             id: Date.now().toString(),
             role: "user",
             content: input,
         };
-        
+
         const assistantMessageId = (Date.now() + 1).toString();
-        
-        setMessages(prev => [...prev, userMessage]);
+
+        setMessages((prev) => [...prev, userMessage]);
         setInput("");
         setIsLoading(true);
-        
-        let assistantContent = "";
-        
+
         try {
-            const response = await fetch("https://ssestaging.luminote.ai/sse", {
+            const response = await sseFetch("/sse", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({ prompt: input }),
             });
-            
+
             if (!response.ok) {
-                throw new Error(`Request failed with status ${response.status}`);
+                throw new Error(
+                    `Request failed with status ${response.status}`
+                );
             }
-            
             if (!response.body) {
                 throw new Error("No response body");
             }
-            
+
+            // Add initial assistant message
+            setMessages((prev) => [
+                ...prev,
+                {
+                    id: assistantMessageId,
+                    role: "assistant",
+                    content: "",
+                },
+            ]);
+
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
-            let buffer = "";
-            
-            // Add initial assistant message
-            setMessages(prev => [...prev, {
-                id: assistantMessageId,
-                role: "assistant",
-                content: "",
-            }]);
-            
+            let assistantContent = "";
+
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
-                
-                buffer += decoder.decode(value, { stream: true });
-                
-                // Process SSE lines
-                let newlineIndex: number;
-                while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
-                    let line = buffer.slice(0, newlineIndex);
-                    buffer = buffer.slice(newlineIndex + 1);
-                    
-                    if (line.endsWith("\r")) line = line.slice(0, -1);
-                    if (line.startsWith(":") || line.trim() === "") continue;
-                    if (!line.startsWith("data: ")) continue;
-                    
-                    const dataStr = line.slice(6).trim();
-                    if (dataStr === "[DONE]") break;
-                    
-                    try {
-                        const parsed = JSON.parse(dataStr);
-                        const content = parsed.choices?.[0]?.delta?.content || parsed.content || parsed.data || dataStr;
-                        if (typeof content === "string") {
-                            assistantContent += content;
-                            setMessages(prev => 
-                                prev.map(m => 
-                                    m.id === assistantMessageId 
-                                        ? { ...m, content: assistantContent }
-                                        : m
-                                )
-                            );
-                        }
-                    } catch {
-                        // If not JSON, treat as plain text
-                        assistantContent += dataStr;
-                        setMessages(prev => 
-                            prev.map(m => 
-                                m.id === assistantMessageId 
-                                    ? { ...m, content: assistantContent }
-                                    : m
-                            )
-                        );
-                    }
-                }
+
+                assistantContent += decoder.decode(value, { stream: true });
+                setMessages((prev) =>
+                    prev.map((m) =>
+                        m.id === assistantMessageId
+                            ? { ...m, content: assistantContent }
+                            : m
+                    )
+                );
             }
-            
-            // Flush remaining buffer
-            if (buffer.trim()) {
-                for (let raw of buffer.split("\n")) {
-                    if (!raw) continue;
-                    if (raw.endsWith("\r")) raw = raw.slice(0, -1);
-                    if (raw.startsWith(":") || raw.trim() === "") continue;
-                    if (!raw.startsWith("data: ")) continue;
-                    const dataStr = raw.slice(6).trim();
-                    if (dataStr === "[DONE]") continue;
-                    try {
-                        const parsed = JSON.parse(dataStr);
-                        const content = parsed.choices?.[0]?.delta?.content || parsed.content || parsed.data || dataStr;
-                        if (typeof content === "string") {
-                            assistantContent += content;
-                        }
-                    } catch {
-                        assistantContent += dataStr;
-                    }
-                }
-                setMessages(prev => 
-                    prev.map(m => 
-                        m.id === assistantMessageId 
+
+            // Flush any remaining decoded text
+            assistantContent += decoder.decode();
+            if (assistantContent) {
+                setMessages((prev) =>
+                    prev.map((m) =>
+                        m.id === assistantMessageId
                             ? { ...m, content: assistantContent }
                             : m
                     )
@@ -211,10 +226,14 @@ export default function Home() {
             }
         } catch (error) {
             console.error("SSE error:", error);
-            setMessages(prev => 
-                prev.map(m => 
-                    m.id === assistantMessageId 
-                        ? { ...m, content: "Sorry, an error occurred while processing your request." }
+            setMessages((prev) =>
+                prev.map((m) =>
+                    m.id === assistantMessageId
+                        ? {
+                              ...m,
+                              content:
+                                  "Sorry, an error occurred while processing your request.",
+                          }
                         : m
                 )
             );
@@ -328,7 +347,9 @@ export default function Home() {
                                                                     idx
                                                                 ) => (
                                                                     <div
-                                                                        key={idx}
+                                                                        key={
+                                                                            idx
+                                                                        }
                                                                         className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-medium border-2 border-background"
                                                                     >
                                                                         {participant.charAt(
@@ -374,7 +395,9 @@ export default function Home() {
                                                             </span>
                                                             <span>•</span>
                                                             <span>
-                                                                {meeting.duration}
+                                                                {
+                                                                    meeting.duration
+                                                                }
                                                             </span>
                                                         </div>
                                                     </div>
@@ -403,19 +426,17 @@ export default function Home() {
                                             : "justify-start"
                                     }`}
                                 >
-                                    <Card
-                                        className={`max-w-[80%] ${
-                                            message.role === "user"
-                                                ? "bg-primary text-primary-foreground"
-                                                : ""
-                                        }`}
-                                    >
-                                        <CardContent className="p-4">
-                                            <p className="text-sm whitespace-pre-wrap">
-                                                {message.content}
-                                            </p>
-                                        </CardContent>
-                                    </Card>
+                                    {message.role === "user" ? (
+                                        <div className="max-w-[80%] text-sm whitespace-pre-wrap bg-primary text-primary-foreground rounded-lg px-4 py-3">
+                                            {message.content}
+                                        </div>
+                                    ) : (
+                                        <div className="max-w-[80%] text-sm">
+                                            {renderAssistantContent(
+                                                message.content
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
 
                                 {message.role === "assistant" &&
@@ -610,7 +631,10 @@ export default function Home() {
                             onKeyDown={handleKeyDown}
                             className="min-h-[60px] resize-none"
                         />
-                        <Button onClick={handleSend} disabled={!input.trim() || isLoading}>
+                        <Button
+                            onClick={handleSend}
+                            disabled={!input.trim() || isLoading}
+                        >
                             <Send className="h-4 w-4" />
                         </Button>
                     </div>
