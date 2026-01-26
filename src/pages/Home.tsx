@@ -163,7 +163,16 @@ export default function Home() {
 
         const assistantMessageId = (Date.now() + 1).toString();
 
-        setMessages((prev) => [...prev, userMessage]);
+        // Add both user message and empty assistant message immediately
+        setMessages((prev) => [
+            ...prev,
+            userMessage,
+            {
+                id: assistantMessageId,
+                role: "assistant",
+                content: "",
+            },
+        ]);
         setInput("");
         setIsLoading(true);
 
@@ -184,16 +193,6 @@ export default function Home() {
             if (!response.body) {
                 throw new Error("No response body");
             }
-
-            // Add initial assistant message
-            setMessages((prev) => [
-                ...prev,
-                {
-                    id: assistantMessageId,
-                    role: "assistant",
-                    content: "",
-                },
-            ]);
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
