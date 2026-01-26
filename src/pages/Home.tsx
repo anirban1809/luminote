@@ -416,7 +416,7 @@ export default function Home() {
                         </div>
                     </div>
                 ) : (
-                    <div className="max-w-3xl mx-auto space-y-6 py-6">
+                    <div className="max-w-3xl mx-auto space-y-6 py-6 px-4">
                         {messages.map((message) => (
                             <div key={message.id} className="space-y-3">
                                 <div
@@ -429,6 +429,15 @@ export default function Home() {
                                     {message.role === "user" ? (
                                         <div className="max-w-[80%] text-sm whitespace-pre-wrap bg-primary text-primary-foreground rounded-lg px-4 py-3">
                                             {message.content}
+                                        </div>
+                                    ) : message.content === "" && isLoading ? (
+                                        <div className="max-w-[80%] flex items-center gap-2 text-muted-foreground">
+                                            <div className="flex gap-1">
+                                                <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                                                <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                                                <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce"></span>
+                                            </div>
+                                            <span className="text-sm">Thinking...</span>
                                         </div>
                                     ) : (
                                         <div className="max-w-[80%] text-sm">
