@@ -1,6 +1,6 @@
-# Zoom Sync Flow
+# luminote.ai
 
-Frontend for a meeting intelligence and sync workflow product (luminote.ai). It provides a multi-workspace UI for managing meetings, transcripts, tasks, and integrations across Zoom/Teams/Meet and downstream tools like Slack and CRMs.
+Frontend for a luminote.ai - an AI Powered meeting intelligence platform. It provides a multi-workspace UI for managing meetings, transcripts, tasks, and integrations across Zoom/Teams/Meet and downstream tools like Slack and CRMs.
 
 ## What this app does
 - **AI meeting assistant**: chat UI for questions over meetings, transcripts, and action items
@@ -16,7 +16,7 @@ Frontend for a meeting intelligence and sync workflow product (luminote.ai). It 
 ## Tech stack
 - Vite + React + TypeScript
 - Tailwind CSS + shadcn-ui
-- React Router + TanStack Query
+- React Router
 
 ## Setup
 Prereqs: Node.js and npm.
