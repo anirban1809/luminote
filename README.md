@@ -1,73 +1,51 @@
-# Welcome to your Lovable project
+# Zoom Sync Flow
 
-## Project info
+Frontend for a meeting intelligence and sync workflow product (luminote.ai). It provides a multi-workspace UI for managing meetings, transcripts, tasks, and integrations across Zoom/Teams/Meet and downstream tools like Slack and CRMs.
 
-**URL**: https://lovable.dev/projects/cd1b277d-ed48-4e23-9698-56c8b71ea8b2
+## What this app does
+- **AI meeting assistant**: chat UI for questions over meetings, transcripts, and action items
+- **Meetings hub**: upcoming + recorded meetings, quick filters, and meeting detail views
+- **Calendar sync**: connect Google/Microsoft calendars and manage sync settings
+- **Integrations**: connect meeting platforms and business tools (Slack, Salesforce, HubSpot, etc.)
+- **Automations**: create rules to push summaries, tasks, and updates
+- **Tasks**: track action items extracted from meetings
+- **Insights & analytics**: meeting trends and usage insights
+- **Notifications**: activity and sync status updates
+- **Account/ops**: onboarding, workspace selection, profile, billing, admin, data management, and help
 
-## How can I edit this code?
+## Tech stack
+- Vite + React + TypeScript
+- Tailwind CSS + shadcn-ui
+- React Router + TanStack Query
 
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/cd1b277d-ed48-4e23-9698-56c8b71ea8b2) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+## Setup
+Prereqs: Node.js and npm.
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Build and preview:
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```sh
+npm run build
+npm run preview
+```
 
-**Use GitHub Codespaces**
+## Data & APIs
+- The UI is mostly wired to `src/lib/mockData.ts` for screens like meetings, tasks, and insights.
+- Auth, chat, and API calls are configured to hit staging endpoints in `src/lib/api/*`.
+- If you don’t have valid credentials for the staging backend, you can still navigate most screens using mock data.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Project structure (high-level)
+- `src/pages/*`: routed screens (meetings, chat, integrations, etc.)
+- `src/components/*`: shared UI and feature components
+- `src/lib/api/*`: API + auth utilities
+- `src/lib/mockData.ts`: demo data used across screens
 
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/cd1b277d-ed48-4e23-9698-56c8b71ea8b2) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## Scripts
+- `npm run dev` - local dev server
+- `npm run build` - production build
+- `npm run preview` - preview the production build
+- `npm run lint` - lint the codebase
